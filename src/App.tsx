@@ -1,7 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import { initializeApp } from 'firebase/app';
-import { getAuth, signInWithCustomToken, signInAnonymously, onAuthStateChanged, signOut } from 'firebase/auth';
-import { getFirestore } from 'firebase/firestore';
 import { 
   LayoutDashboard, 
   ClipboardCheck, 
@@ -10,7 +7,8 @@ import {
   BarChart2, 
   CheckSquare,
   Loader2,
-  LogOut
+  LogOut,
+  BrainCircuit
 } from 'lucide-react';
 
 import DashboardView from './components/DashboardView';
@@ -19,29 +17,7 @@ import ValidationView from './components/ValidationView';
 import TaskAnalysisView from './components/TaskAnalysisView';
 import InterviewView from './components/InterviewView';
 import EvaluationView from './components/EvaluationView';
-
-// --- FIREBASE INITIALIZATION ---
-let app = null;
-let auth = null;
-let db = null;
-let firebaseConfig = null;
-
-try {
-  if (typeof __firebase_config !== 'undefined' && __firebase_config) {
-    firebaseConfig = JSON.parse(__firebase_config);
-  }
-
-  // Only initialize if we have a valid config with apiKey
-  if (firebaseConfig && firebaseConfig.apiKey) {
-    app = initializeApp(firebaseConfig);
-    auth = getAuth(app);
-    db = getFirestore(app);
-  } else {
-    console.warn("Firebase config missing or invalid. App will run in Demo Mode.");
-  }
-} catch (error) {
-  console.error("Error initializing Firebase:", error);
-}
+import AnalyticsView from './components/AnalyticsView';
 
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'dbr-mfl-app';
 
@@ -54,58 +30,27 @@ export default function PortalRisetDBR() {
   // --- AUTHENTICATION ---
   useEffect(() => {
     const initAuth = async () => {
-      // If auth is not initialized (missing config), force Demo Mode
-      if (!auth) {
-        setIsDemoMode(true);
-        setUser({ uid: 'demo-user', displayName: 'Demo User' });
-        setLoading(false);
-        return;
-      }
-
-      const token = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
+      // Periksa apakah URL Google Apps Script sudah dikonfigurasi
+      const gasUrl = import.meta.env.VITE_GAS_WEB_APP_URL || "https://script.google.com/macros/s/AKfycbzTyGL1nfoO6eU6ombC3J-GF6-jM_ElGUd8vE-iwNW6kiR7wp327aUNWSwKltWzDfS_hA/exec";
       
-      try {
-        if (token) {
-          await signInWithCustomToken(auth, token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (error) {
-        console.error("Auth error:", error);
+      if (!gasUrl) {
         setIsDemoMode(true);
-        setUser({ uid: 'demo-user', displayName: 'Demo User' });
-      } finally {
-        setLoading(false);
+        setUser({ id: 'demo-user', email: 'demo@example.com' });
+      } else {
+        setIsDemoMode(false);
+        // Karena GAS tidak memiliki autentikasi bawaan seperti Supabase/Firebase,
+        // kita set user dummy untuk UI.
+        setUser({ id: 'researcher-1', email: 'researcher@dbr.com' });
       }
+      setLoading(false);
     };
 
     initAuth();
-
-    if (auth) {
-      const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-        if (currentUser) {
-          setUser(currentUser);
-          setIsDemoMode(false);
-        }
-        setLoading(false);
-      });
-      return () => unsubscribe();
-    } else {
-      setLoading(false);
-    }
   }, []);
 
   const handleLogout = async () => {
-    if (!auth) {
-      window.location.reload();
-      return;
-    }
     try {
-      await signOut(auth);
-      // If demo mode, just reload to reset
-      if (isDemoMode) {
-        window.location.reload();
-      }
+      window.location.reload();
     } catch (error) {
       console.error("Logout error:", error);
     }
@@ -123,7 +68,7 @@ export default function PortalRisetDBR() {
   }
 
   const renderContent = () => {
-    const props = { user, db, isDemoMode, appId };
+    const props = { user, isDemoMode, appId };
 
     switch (activeTab) {
       case 'dashboard': return <DashboardView {...props} />;
@@ -132,6 +77,7 @@ export default function PortalRisetDBR() {
       case 'inst3': return <ObservasiView {...props} />;
       case 'inst4': return <TaskAnalysisView {...props} />;
       case 'inst5': return <EvaluationView {...props} />;
+      case 'analytics': return <AnalyticsView />;
       default: return <DashboardView {...props} />;
     }
   };
@@ -192,6 +138,17 @@ export default function PortalRisetDBR() {
             active={activeTab === 'inst5'} 
             onClick={() => setActiveTab('inst5')} 
           />
+
+          <div className="pt-4 pb-2 px-3 hidden lg:block">
+            <p className="text-xs font-bold text-slate-500 uppercase tracking-wider">Advanced</p>
+          </div>
+          
+          <SidebarItem 
+            icon={<BrainCircuit size={20} />} 
+            label="Analisis AI (Python)" 
+            active={activeTab === 'analytics'} 
+            onClick={() => setActiveTab('analytics')} 
+          />
         </nav>
 
         <div className="p-4 border-t border-slate-800">
@@ -216,13 +173,14 @@ export default function PortalRisetDBR() {
               {activeTab === 'inst3' && 'Instrumen 3: Observasi'}
               {activeTab === 'inst4' && 'Instrumen 4: Analisis Tugas'}
               {activeTab === 'inst5' && 'Instrumen 5: Evaluasi'}
+              {activeTab === 'analytics' && 'Analisis Lanjutan (Python)'}
             </h2>
             <p className="text-sm text-slate-500">
-              {user?.displayName || 'User'} • {isDemoMode ? 'Offline Mode' : 'Online'}
+              {user?.email || 'Peneliti'} • {isDemoMode ? 'Offline Mode' : 'Online'}
             </p>
           </div>
           <div className="w-10 h-10 bg-slate-200 rounded-full overflow-hidden border-2 border-white shadow-sm">
-            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.uid}`} alt="Avatar" />
+            <img src={`https://api.dicebear.com/7.x/avataaars/svg?seed=${user?.id || 'researcher'}`} alt="Avatar" />
           </div>
         </header>
 

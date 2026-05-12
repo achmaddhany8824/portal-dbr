@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, onSnapshot, query, serverTimestamp } from 'firebase/firestore';
 import { Plus, Save, Loader2, ClipboardCheck, User as UserIcon, ChevronLeft } from 'lucide-react';
 import { ValidationSession, ValidationCriteria } from '../types';
+import { getValidationSessions, createValidationSession } from '../services/dataService';
 
 interface ValidationViewProps {
   user: any;
-  db: any;
   isDemoMode: boolean;
   appId: string;
 }
 
-export default function ValidationView({ user, db, isDemoMode, appId }: ValidationViewProps) {
+export default function ValidationView({ user, isDemoMode, appId }: ValidationViewProps) {
   const [validations, setValidations] = useState<ValidationSession[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
   const [isSaving, setIsSaving] = useState(false);
@@ -27,27 +26,24 @@ export default function ValidationView({ user, db, isDemoMode, appId }: Validati
   useEffect(() => {
     if (!user) return;
 
-    if (isDemoMode || !db) {
+    if (isDemoMode) {
       if (validations.length === 0) {
         setValidations([]);
       }
       return;
     }
 
-    const valRef = collection(db, 'artifacts', appId, 'users', user.uid, 'validations');
-    const q = query(valRef);
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as ValidationSession));
-      data.sort((a, b) => {
-          const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt || 0);
-          const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt || 0);
-          return timeB - timeA;
-      });
-      setValidations(data);
-    });
+    const fetchData = async () => {
+      try {
+        const data = await getValidationSessions();
+        setValidations(data);
+      } catch (error) {
+        console.error("Error fetching validations:", error);
+      }
+    };
 
-    return () => unsubscribe();
-  }, [user, isDemoMode, db, appId]);
+    fetchData();
+  }, [user, isDemoMode, appId]);
 
   // Default Criteria based on "Desain Pembelajaran Matematika Terintegrasi Literasi Finansial"
   const criteriaList: ValidationCriteria[] = [
@@ -97,7 +93,7 @@ export default function ValidationView({ user, db, isDemoMode, appId }: Validati
       createdAt: Date.now()
     };
 
-    if (isDemoMode || !db) {
+    if (isDemoMode) {
       setValidations(prev => [newSession, ...prev]);
       setIsSaving(false);
       setViewMode('list');
@@ -113,12 +109,9 @@ export default function ValidationView({ user, db, isDemoMode, appId }: Validati
     }
 
     try {
-      const valRef = collection(db, 'artifacts', appId, 'users', user.uid, 'validations');
       const { id, ...data } = newSession;
-      await addDoc(valRef, {
-        ...data,
-        createdAt: serverTimestamp()
-      });
+      const savedSession = await createValidationSession(data);
+      setValidations(prev => [savedSession, ...prev]);
       setViewMode('list');
       setFormData({
         validatorName: '',

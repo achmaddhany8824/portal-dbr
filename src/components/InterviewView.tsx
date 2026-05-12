@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, onSnapshot, query, serverTimestamp } from 'firebase/firestore';
-import { Plus, Save, Loader2, MessageSquare, ChevronLeft } from 'lucide-react';
+import { Plus, Save, Loader2, MessageSquare, ChevronLeft, User } from 'lucide-react';
 import { InterviewSession } from '../types';
+import { getInterviewSessions, createInterviewSession } from '../services/dataService';
 
 interface InterviewViewProps {
   user: any;
-  db: any;
   isDemoMode: boolean;
   appId: string;
 }
 
-export default function InterviewView({ user, db, isDemoMode, appId }: InterviewViewProps) {
+export default function InterviewView({ user, isDemoMode, appId }: InterviewViewProps) {
   const [interviews, setInterviews] = useState<InterviewSession[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
   const [isSaving, setIsSaving] = useState(false);
@@ -28,27 +27,24 @@ export default function InterviewView({ user, db, isDemoMode, appId }: Interview
   useEffect(() => {
     if (!user) return;
 
-    if (isDemoMode || !db) {
+    if (isDemoMode) {
       if (interviews.length === 0) {
         setInterviews([]);
       }
       return;
     }
 
-    const interviewRef = collection(db, 'artifacts', appId, 'users', user.uid, 'interviews');
-    const q = query(interviewRef);
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as InterviewSession));
-      data.sort((a, b) => {
-          const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt || 0);
-          const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt || 0);
-          return timeB - timeA;
-      });
-      setInterviews(data);
-    });
+    const fetchData = async () => {
+      try {
+        const data = await getInterviewSessions();
+        setInterviews(data);
+      } catch (error) {
+        console.error("Error fetching interviews:", error);
+      }
+    };
 
-    return () => unsubscribe();
-  }, [user, isDemoMode, db, appId]);
+    fetchData();
+  }, [user, isDemoMode, appId]);
 
   const getQuestions = (topic: string) => {
     switch (topic) {
@@ -102,7 +98,7 @@ export default function InterviewView({ user, db, isDemoMode, appId }: Interview
       createdAt: Date.now()
     };
 
-    if (isDemoMode || !db) {
+    if (isDemoMode) {
       setInterviews(prev => [newSession, ...prev]);
       setIsSaving(false);
       setViewMode('list');
@@ -119,12 +115,9 @@ export default function InterviewView({ user, db, isDemoMode, appId }: Interview
     }
 
     try {
-      const interviewRef = collection(db, 'artifacts', appId, 'users', user.uid, 'interviews');
       const { id, ...data } = newSession;
-      await addDoc(interviewRef, {
-        ...data,
-        createdAt: serverTimestamp()
-      });
+      const savedSession = await createInterviewSession(data);
+      setInterviews(prev => [savedSession, ...prev]);
       setViewMode('list');
       setFormData({
         studentCode: '',

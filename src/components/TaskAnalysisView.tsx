@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, onSnapshot, query, serverTimestamp } from 'firebase/firestore';
 import { Plus, Save, Loader2, BarChart2, ChevronLeft, AlertTriangle } from 'lucide-react';
 import { TaskAnalysisSession, TaskActivity } from '../types';
+import { getTaskAnalysisSessions, createTaskAnalysisSession } from '../services/dataService';
 
 interface TaskAnalysisViewProps {
   user: any;
-  db: any;
   isDemoMode: boolean;
   appId: string;
 }
 
-export default function TaskAnalysisView({ user, db, isDemoMode, appId }: TaskAnalysisViewProps) {
+export default function TaskAnalysisView({ user, isDemoMode, appId }: TaskAnalysisViewProps) {
   const [taskAnalyses, setTaskAnalyses] = useState<TaskAnalysisSession[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
   const [isSaving, setIsSaving] = useState(false);
@@ -24,27 +23,24 @@ export default function TaskAnalysisView({ user, db, isDemoMode, appId }: TaskAn
   useEffect(() => {
     if (!user) return;
 
-    if (isDemoMode || !db) {
+    if (isDemoMode) {
       if (taskAnalyses.length === 0) {
         setTaskAnalyses([]);
       }
       return;
     }
 
-    const taskRef = collection(db, 'artifacts', appId, 'users', user.uid, 'task_analyses');
-    const q = query(taskRef);
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as TaskAnalysisSession));
-      data.sort((a, b) => {
-          const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt || 0);
-          const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt || 0);
-          return timeB - timeA;
-      });
-      setTaskAnalyses(data);
-    });
+    const fetchData = async () => {
+      try {
+        const data = await getTaskAnalysisSessions();
+        setTaskAnalyses(data);
+      } catch (error) {
+        console.error("Error fetching task analyses:", error);
+      }
+    };
 
-    return () => unsubscribe();
-  }, [user, isDemoMode, db, appId]);
+    fetchData();
+  }, [user, isDemoMode, appId]);
 
   const activities: TaskActivity[] = [
     { id: 'p1-a1', pertemuan: 1, name: 'Aktivitas 1 (The Auditor)', indicator: 'Mampu menemukan baris mutasi yang salah menggunakan aturan operasi bilangan bulat (+/-).' },
@@ -85,7 +81,7 @@ export default function TaskAnalysisView({ user, db, isDemoMode, appId }: TaskAn
       createdAt: Date.now()
     };
 
-    if (isDemoMode || !db) {
+    if (isDemoMode) {
       setTaskAnalyses(prev => [newSession, ...prev]);
       setIsSaving(false);
       setViewMode('list');
@@ -94,12 +90,9 @@ export default function TaskAnalysisView({ user, db, isDemoMode, appId }: TaskAn
     }
 
     try {
-      const taskRef = collection(db, 'artifacts', appId, 'users', user.uid, 'task_analyses');
       const { id, ...data } = newSession;
-      await addDoc(taskRef, {
-        ...data,
-        createdAt: serverTimestamp()
-      });
+      const savedSession = await createTaskAnalysisSession(data);
+      setTaskAnalyses(prev => [savedSession, ...prev]);
       setViewMode('list');
       setFormData({ totalStudents: 0, results: {}, qualitativeAnalysis: [] });
     } catch (error) {

@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, onSnapshot, query, serverTimestamp } from 'firebase/firestore';
 import { Plus, Save, Loader2, Database } from 'lucide-react';
 import { Observation } from '../types';
+import { getObservations, createObservation } from '../services/dataService';
 
 interface ObservasiViewProps {
   user: any;
-  db: any;
   isDemoMode: boolean;
   appId: string;
 }
 
-export default function ObservasiView({ user, db, isDemoMode, appId }: ObservasiViewProps) {
+export default function ObservasiView({ user, isDemoMode, appId }: ObservasiViewProps) {
   const [observations, setObservations] = useState<Observation[]>([]);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
@@ -25,7 +24,7 @@ export default function ObservasiView({ user, db, isDemoMode, appId }: Observasi
   useEffect(() => {
     if (!user) return;
 
-    if (isDemoMode || !db) {
+    if (isDemoMode) {
       if (observations.length === 0) {
         setObservations([
           {
@@ -42,26 +41,17 @@ export default function ObservasiView({ user, db, isDemoMode, appId }: Observasi
       return;
     }
 
-    const obsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'observations');
-    const q = query(obsRef);
+    const fetchData = async () => {
+      try {
+        const data = await getObservations();
+        setObservations(data);
+      } catch (error) {
+        console.error("Error fetching observations:", error);
+      }
+    };
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Observation));
-      data.sort((a, b) => {
-          const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt || 0);
-          const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt || 0);
-          return timeB - timeA;
-      });
-      setObservations(data);
-    }, (error) => {
-      console.error("Firestore error:", error);
-    });
-
-    return () => unsubscribe();
-  }, [user, isDemoMode, db, appId]);
+    fetchData();
+  }, [user, isDemoMode, appId]);
 
   const handleSaveObservation = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,7 +60,7 @@ export default function ObservasiView({ user, db, isDemoMode, appId }: Observasi
 
     setIsSaving(true);
     
-    if (isDemoMode || !db) {
+    if (isDemoMode) {
       const newObs: Observation = {
         id: `local-${Date.now()}`,
         ...formData,
@@ -90,11 +80,8 @@ export default function ObservasiView({ user, db, isDemoMode, appId }: Observasi
     }
 
     try {
-      const obsRef = collection(db, 'artifacts', appId, 'users', user.uid, 'observations');
-      await addDoc(obsRef, {
-        ...formData,
-        createdAt: serverTimestamp()
-      });
+      const newObs = await createObservation(formData);
+      setObservations(prev => [newObs, ...prev]);
       setFormData({
         pertemuan: formData.pertemuan,
         waktu: '',

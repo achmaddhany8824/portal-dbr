@@ -1,16 +1,15 @@
 import React, { useState, useEffect } from 'react';
-import { collection, addDoc, onSnapshot, query, serverTimestamp } from 'firebase/firestore';
-import { CheckSquare, Plus, Save, Loader2, ChevronLeft, AlertTriangle, ChevronDown, Info } from 'lucide-react';
+import { CheckSquare, Plus, Save, Loader2, ChevronLeft, AlertTriangle, ChevronDown, Info, User } from 'lucide-react';
 import { EvaluationSession } from '../types';
+import { getEvaluationSessions, createEvaluationSession } from '../services/dataService';
 
 interface EvaluationViewProps {
   user: any;
-  db: any;
   isDemoMode: boolean;
   appId: string;
 }
 
-export default function EvaluationView({ user, db, isDemoMode, appId }: EvaluationViewProps) {
+export default function EvaluationView({ user, isDemoMode, appId }: EvaluationViewProps) {
   const [evaluations, setEvaluations] = useState<EvaluationSession[]>([]);
   const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
   const [isSaving, setIsSaving] = useState(false);
@@ -62,25 +61,24 @@ export default function EvaluationView({ user, db, isDemoMode, appId }: Evaluati
   useEffect(() => {
     if (!user) return;
 
-    if (isDemoMode || !db) {
-      // Demo Data could be added here if needed
+    if (isDemoMode) {
+      if (evaluations.length === 0) {
+        setEvaluations([]);
+      }
       return;
     }
 
-    const evalRef = collection(db, 'artifacts', appId, 'users', user.uid, 'evaluations');
-    const q = query(evalRef);
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const data = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as EvaluationSession));
-      data.sort((a, b) => {
-          const timeA = a.createdAt?.toMillis ? a.createdAt.toMillis() : (a.createdAt || 0);
-          const timeB = b.createdAt?.toMillis ? b.createdAt.toMillis() : (b.createdAt || 0);
-          return timeB - timeA;
-      });
-      setEvaluations(data);
-    });
+    const fetchData = async () => {
+      try {
+        const data = await getEvaluationSessions();
+        setEvaluations(data);
+      } catch (error) {
+        console.error("Error fetching evaluations:", error);
+      }
+    };
 
-    return () => unsubscribe();
-  }, [user, isDemoMode, db, appId]);
+    fetchData();
+  }, [user, isDemoMode, appId]);
 
   const calculateTotal = (scores: { mathFoundation: number, plausibility: number, novelty: number }) => {
     return (scores.mathFoundation || 0) + (scores.plausibility || 0) + (scores.novelty || 0);
@@ -104,7 +102,7 @@ export default function EvaluationView({ user, db, isDemoMode, appId }: Evaluati
       createdAt: Date.now()
     };
 
-    if (isDemoMode || !db) {
+    if (isDemoMode) {
       setEvaluations(prev => [newSession, ...prev]);
       setIsSaving(false);
       setViewMode('list');
@@ -119,12 +117,9 @@ export default function EvaluationView({ user, db, isDemoMode, appId }: Evaluati
     }
 
     try {
-      const evalRef = collection(db, 'artifacts', appId, 'users', user.uid, 'evaluations');
       const { id, ...data } = newSession;
-      await addDoc(evalRef, {
-        ...data,
-        createdAt: serverTimestamp()
-      });
+      const savedSession = await createEvaluationSession(data);
+      setEvaluations(prev => [savedSession, ...prev]);
       setViewMode('list');
       setFormData({
         studentId: '',
