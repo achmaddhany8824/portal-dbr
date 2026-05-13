@@ -12,7 +12,7 @@ st.set_page_config(page_title="DBR Research Analytics", layout="wide")
 
 # --- Google Apps Script Connection ---
 # URL Web App GAS yang diberikan
-DEFAULT_GAS_URL = "https://script.google.com/macros/s/AKfycbzTyGL1nfoO6eU6ombC3J-GF6-jM_ElGUd8vE-iwNW6kiR7wp327aUNWSwKltWzDfS_hA/exec"
+DEFAULT_GAS_URL = "YOUR_CODE_GOOGLE_APPSCRIPT"
 
 # Mengambil dari secrets jika ada, jika tidak gunakan default
 try:
