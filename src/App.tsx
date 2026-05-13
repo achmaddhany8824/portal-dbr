@@ -31,7 +31,7 @@ export default function PortalRisetDBR() {
   useEffect(() => {
     const initAuth = async () => {
       // Periksa apakah URL Google Apps Script sudah dikonfigurasi
-      const gasUrl = import.meta.env.VITE_GAS_WEB_APP_URL || "https://script.google.com/macros/s/AKfycbzTyGL1nfoO6eU6ombC3J-GF6-jM_ElGUd8vE-iwNW6kiR7wp327aUNWSwKltWzDfS_hA/exec";
+      const gasUrl = import.meta.env.VITE_GAS_WEB_APP_URL || "YOUR_CODE_GOOGLE_APPSCRIPT";
       
       if (!gasUrl) {
         setIsDemoMode(true);
