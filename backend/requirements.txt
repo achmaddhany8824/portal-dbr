@@ -6,3 +6,5 @@ matplotlib
 plotly
 nltk
 pingouin
+networkx
+scikit-learn
