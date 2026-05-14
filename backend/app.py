@@ -333,26 +333,43 @@ with tab_val:
     
     try:
         df_val = fetch_data("validation_sessions")
-        if not df_val.empty and "evaluations" in df_val.columns:
+        
+        # PERUBAHAN 1: Ganti pencarian kolom menjadi "scores" (sesuai CSV Anda)
+        if not df_val.empty and "scores" in df_val.columns:
             records = []
             for _, row in df_val.iterrows():
-                validator = row.get("validatorName", row.get("validator_name", "Unknown"))
-                instrument = row.get("instrumentType", row.get("instrument_type", "Unknown"))
-                evals = row["evaluations"]
+                # Menarik nama validator (sesuai CSV)
+                validator = row.get("validator_name", row.get("validatorName", "Unknown"))
                 
+                # PERUBAHAN 2: Karena di CSV tidak ada kolom 'instrument_type', kita beri default
+                instrument = row.get("instrument_type", row.get("instrumentType", "Instrumen Validasi Umum"))
+                
+                evals = row["scores"]
+                
+                # Parsing string JSON menjadi dictionary
                 if isinstance(evals, str):
-                    evals = json.loads(evals.replace("'", "\"")) if "{" in evals else {}
-                    
+                    try:
+                        evals = json.loads(evals.replace("'", "\""))
+                    except:
+                        try:
+                            evals = ast.literal_eval(evals)
+                        except:
+                            evals = {}
+                
                 if isinstance(evals, dict):
-                    for crit_id, crit_data in evals.items():
-                        score = crit_data.get("score", 0)
-                        if score > 0:
-                            records.append({
-                                "Validator": validator,
-                                "Instrumen": instrument,
-                                "Kriteria": crit_id,
-                                "Skor": int(score)
-                            })
+                    for crit_id, score_val in evals.items():
+                        # PERUBAHAN 3: Data dari CSV berbentuk {"c1": 4}, jadi score_val langsung berupa angka
+                        try:
+                            score = float(score_val)
+                            if score > 0:
+                                records.append({
+                                    "Validator": validator,
+                                    "Instrumen": instrument,
+                                    "Kriteria": crit_id,
+                                    "Skor": int(score)
+                                })
+                        except (ValueError, TypeError):
+                            pass # Abaikan jika bukan angka
                             
             df_records = pd.DataFrame(records)
             
@@ -380,29 +397,33 @@ with tab_val:
                     st.subheader("Kalkulasi ICC")
                     st.info("Kriteria Minimal: 2 validator menilai kriteria yang sama dengan variasi skor.")
                     try:
-                        icc = pg.intraclass_corr(data=df_subset, targets='Kriteria', raters='Validator', ratings='Skor')
-                        icc_value = icc.set_index('Type').loc['ICC3k', 'ICC']
-                        
-                        st.metric(label="Nilai ICC3k", value=f"{icc_value:.2f}")
-                        
-                        if icc_value >= 0.75:
-                            st.success("Tinggi: Kesepakatan antar validator Kuat/Sangat Baik.")
-                        elif icc_value >= 0.5:
-                            st.warning("Sedang: Kesepakatan Moderat.")
-                        else:
-                            st.error("Rendah: Kesepakatan Lemah. Evaluasi ulang rubrik Anda.")
+                        # Pengaman: pastikan minimal ada 2 validator berbeda agar Pingouin tidak crash
+                        if df_subset['Validator'].nunique() > 1 and df_subset['Kriteria'].nunique() > 1:
+                            icc = pg.intraclass_corr(data=df_subset, targets='Kriteria', raters='Validator', ratings='Skor')
+                            icc_value = icc.set_index('Type').loc['ICC3k', 'ICC']
                             
-                        with st.expander("Lihat Detail Metrik ICC"):
-                            st.dataframe(icc[['Type', 'ICC', 'F', 'df1', 'df2', 'pval', 'CI95%']])
+                            st.metric(label="Nilai ICC3k", value=f"{icc_value:.2f}")
+                            
+                            if icc_value >= 0.75:
+                                st.success("Tinggi: Kesepakatan antar validator Kuat/Sangat Baik.")
+                            elif icc_value >= 0.5:
+                                st.warning("Sedang: Kesepakatan Moderat.")
+                            else:
+                                st.error("Rendah: Kesepakatan Lemah. Evaluasi ulang rubrik Anda.")
+                                
+                            with st.expander("Lihat Detail Metrik ICC"):
+                                st.dataframe(icc[['Type', 'ICC', 'F', 'df1', 'df2', 'pval', 'CI95%']])
+                        else:
+                            st.warning("Data belum mencukupi (Butuh minimal 2 validator berbeda).")
                     except Exception as e_icc:
-                        st.error(f"Belum ada variasi data yang cukup untuk statistik ICC.")
+                        st.error(f"Statistik ICC belum bisa dihitung: {e_icc}")
             else:
-                st.info("Belum ada skor yang tercatat dalam data validasi.")
+                st.info("Belum ada skor valid yang tercatat dari validator.")
         else:
-            st.info("Belum ada data validasi ahli sama sekali.")
+            st.info("Belum ada data validasi ahli sama sekali. (Pastikan tabel memiliki kolom 'scores')")
+            
     except Exception as e:
         st.error(f"Error memuat data validasi: {e}")
-
 
 # ==========================================
 # 4. DATA MENTAH
